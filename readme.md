@@ -1,1 +1,1 @@
-![](images/maze_featureimg.png)
+<img src="images/maze_featureimg.png" widht="100">
