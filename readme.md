@@ -1,1 +1,1 @@
-<img src="images/maze_featureimg.png" widht="100">
+<img src="images/maze_featureimg.png" widht="50">
