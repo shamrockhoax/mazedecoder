@@ -6,8 +6,7 @@ idaapi.require("maze_function_analysis")
 
 
 #
-#   Registers, gotta be stored somewhere, but fuck if I know
-#     (also realized that this may not be entirely correct and that I may not need it)
+#   Registers, if needed
 #
 gp_registers = {0:'eax',1:'ecx',2:'edx',3:'ebx',4:'esp',5:'ebp',6:'esi',7:'edi'}
 
@@ -1007,6 +1006,7 @@ def FindAbsoluteJumps():
 
     abs_jmp_ea = ida_search.find_binary(0, end_ea, jz_short_jmp, 0, SEARCH_DOWN | SEARCH_CASE)
     while abs_jmp_ea != idc.BADADDR: 
+        print "Short jump: %08x" % abs_jmp_ea
         obfuscated_list.append(abs_jmp_ea)
         abs_jmp_ea =ida_search.find_binary(abs_jmp_ea+4, end_ea,  jz_short_jmp, 0, SEARCH_DOWN | SEARCH_CASE)
     
@@ -1056,13 +1056,13 @@ def FindAbsoluteJumps():
             jnz_insn = ida_ua.insn_t()
             ida_ua.decode_insn(jnz_insn, jnz_insn_ea)
 
-            print "%08x - JZ" % abs_jmp_ea
+            #print "%08x - JZ" % abs_jmp_ea
             if CheckValidTargettingInstr(jnz_insn, "jnz"):
                 #
                 #   Absolute JMP found
                 #
 
-                print "%08x - verified" % abs_jmp_ea
+                #print "%08x - verified" % abs_jmp_ea
                 addr_list.add(jz_insn_ea)
     
     return addr_list
@@ -2087,33 +2087,35 @@ def main():
     calltypethree_addresses = set()
     absolute_jumps = set()
 
-    patch = True
+
+    find_obfuscations = True
+    do_patches = False
     
-    if patch: 
-        obf_windowsapi_calls = FindObfuscatedWindowsAPICalls()
-        if len(obf_windowsapi_calls) > 0:
+    if find_obfuscations: 
+        #obf_windowsapi_calls = FindObfuscatedWindowsAPICalls()
+        if len(obf_windowsapi_calls) > 0 and do_patches:
             for obf_windowsapi_call_ea in obf_windowsapi_calls:
                 print "Windows API Call: %08x" % obf_windowsapi_call_ea
                 PatchObfuscatedWindowsAPICalls(obf_windowsapi_call_ea)
                 #break
         
-        typetwo_addresses = FindCallTypeTwoCFGObfuscation()    
-        if len(typetwo_addresses) > 0:
+        #typetwo_addresses = FindCallTypeTwoCFGObfuscation()    
+        if len(typetwo_addresses) > 0 and do_patches:
             for typetwo_ea in typetwo_addresses:
                 print "Call Type Two: %08x" % (typetwo_ea)
                 PatchCallTypeTwoCFGObfuscation(typetwo_ea)
                 #break
         
-        typeone_addresses = FindCallTypeOneCFGObfuscation()
-        if len(typeone_addresses) > 0:
+        #typeone_addresses = FindCallTypeOneCFGObfuscation()
+        if len(typeone_addresses) > 0 and do_patches:
             #print len(typeone_addresses)
             for typeone_ea in typeone_addresses:
                 print "Call Type One: %08x" % (typeone_ea)
                 PatchCallTypeOneCFGObfuscation(typeone_ea)
         #       #break
 
-        calltypethree_addresses = FindCallTypeThreeCFGObfuscation()
-        if len(calltypethree_addresses):
+        #calltypethree_addresses = FindCallTypeThreeCFGObfuscation()
+        if len(calltypethree_addresses) and do_patches:
             for typethree_ea in calltypethree_addresses:
                 print "Call Type Three: %08x" % (typethree_ea)
                 PatchCallTypeThreeCFGObfuscation(typethree_ea)
@@ -2123,15 +2125,15 @@ def main():
         if len(absolute_jumps) > 0:
             for absolut_jmp_ea in absolute_jumps:
                 print "Absolute Jump: %08x" % (absolut_jmp_ea)
-                PatchAbsoluteJump(absolut_jmp_ea)
+                #PatchAbsoluteJump(absolut_jmp_ea)
                 #break
     
     
-    typeone_epilogues, epilogue_immediates = GetFunctionEpiloguesOne()
-    typeone_prologues = GetFunctionProloguesOne(epilogue_immediates,typeone_epilogues)
-    BuildFunctions(typeone_prologues,typeone_epilogues)
+    #typeone_epilogues, epilogue_immediates = GetFunctionEpiloguesOne()
+    #typeone_prologues = GetFunctionProloguesOne(epilogue_immediates,typeone_epilogues)
+    #BuildFunctions(typeone_prologues,typeone_epilogues)
 
-    CheckAllFunctionsEndAddresses(typeone_prologues,typeone_epilogues)
+    #CheckAllFunctionsEndAddresses(typeone_prologues,typeone_epilogues)
     
     #BuildFunctions2(typeone_prologues, typeone_epilogues)
     #CheckAllFunctionsEndAddresses2()
