@@ -18,3 +18,4 @@ This is the source code related to my blogpost published over at [Crowdstrike's 
 ## Further Reading
 * [A Malware Researcher's Guide to Reversing Maze](https://labs.bitdefender.com/2020/03/a-malware-researchers-guide-to-reversing-maze/) by Mihai Neagu (@mneagu8d) and Bogdan BOTEZATU (@bbotezatu)
     * Leverages IDA's Processor Module Extensions
+* [Transparent Deobfuscation With IDA Processor Module Extensions](https://www.msreverseengineering.com/blog/2015/6/29/transparent-deobfuscation-with-ida-processor-module-extensions) by Rolf Rolles
