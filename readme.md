@@ -2,7 +2,7 @@
 <img src="images/maze_featureimg.png" width="700">
 </p>
 
-# The Many Paths of Maze: Deobfuscating Maze Control Flow Obfuscations
+# Deobfuscating Maze's Control Flow Obfuscations
 
 
 
