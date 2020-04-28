@@ -1,5 +1,6 @@
+<p align="center">
 <img src="images/maze_featureimg.png" width="500">
-
+</p>
 
 
 
