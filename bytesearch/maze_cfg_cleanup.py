@@ -3,19 +3,13 @@ import string
 
 idaapi.require("maze_functions")
 idaapi.require("maze_function_analysis")
-
+idaapi.require("maze_deobf_utils")
 
 #
 #   Registers, if needed
 #
 gp_registers = {0:'eax',1:'ecx',2:'edx',3:'ebx',4:'esp',5:'ebp',6:'esi',7:'edi'}
 
-def CheckIsCode(Instr_ea):
-    '''
-        @brief Check instruction is defined as code in the IDB database.
-    '''
-
-    return (get_full_flags(Instr_ea) & MS_CLS) == FF_CODE
 
 def CheckIsASCII(Ascii_ea):
     '''
@@ -56,34 +50,6 @@ def ZeroOutInstruction(Targ_insn):
             insn_ea += 1
             idx += 1
 
-def CheckIsDllName(Strlit_ea):
-    '''
-        @brief Receive an address and verify that the bytes at that address are both
-                ASCII and in with ".dll"
-        
-        @return BOOL
-    '''
-    is_module_name = False
-
-    start_ea = Strlit_ea
-    module_name = ""
-    char = get_wide_byte(start_ea)
-
-    while ida_name.is_strlit_cp(char):
-        module_name += chr(char)    
-        start_ea += 1
-        char = get_wide_byte(start_ea)
-    
-    if get_wide_byte(start_ea) ==  0x00:
-        #
-        #   Final char in ASCII string should be a NULL byte
-        #
-
-        if module_name.endswith(".dll"):
-            is_module_name = True
-
-    return is_module_name
-
 def GetModuleName(Strlit_ea):
     '''
         @brief Get the module name, this was already checked by the IsValidName from
@@ -110,84 +76,6 @@ def GetModuleName(Strlit_ea):
     
     return module_name
 
-def CheckCodeSegment(Curr_ea, Target_ea):
-    '''
-        @brief Check if the Target_ea is in a code segment and if the segment is marked as code
-    '''
-
-    is_code_segment = False
-
-    #print "segcheck", Target_ea >= get_segm_start(Curr_ea), Target_ea <= get_segm_end(Curr_ea)
-    #print "segcheck address: %08x, Target %08x" % (Curr_ea,Target_ea)
-
-    curr_segment = ida_segment.getseg(Curr_ea)
-    target_segment = ida_segment.getseg(Target_ea)
-
-    is_same_segment = Target_ea >= curr_segment.start_ea and Target_ea <= curr_segment.end_ea
-
-    if is_same_segment:
-
-        is_code_segment = (curr_segment.type == idc.SEG_CODE) and (target_segment.type == idc.SEG_CODE)
-
-    
-
-    return is_code_segment and is_same_segment
-
-def GetInstuctionTargetAddress(Target_insn):
-    '''
-        @brief Return the operand value for the JZ, JNZ, or push isntruciton
-    '''
-
-    target_ea = 0
-
-    if type(Target_insn) == ida_ua.insn_t:
-        #print "GITA: type match"
-        target_op = Target_insn.ops[0]
-        #print "GITA: ", target_op.type, hex(target_op.value), hex(target_op.addr)
-        if target_op.type == 5: 
-            target_ea = target_op.value
-        elif target_op.type == 6 or target_op.type == 7:
-            target_ea = target_op.addr
-    
-    return target_ea
-
-def CheckValidInstrImmediate(Curr_insn_t, Expected_mnem):
-    '''
-        @detail Takes single operand instruction and validates the instruction matches Expected_mnem and
-                   that the operand is an immediate (type 5).
-
-    '''
-    isValid = False
-
-    mnem = Expected_mnem.lower()
-
-    if type(Curr_insn_t) == ida_ua.insn_t :
-        #
-        #  Correct type
-        #
-
-        insn = Curr_insn_t
-        insn_ea = insn.ea
-        insn_dism = generate_disasm_line(insn_ea,1)
-
-        if insn_dism[:5].startswith(mnem):
-            operands = insn.ops
-            if len(operands) > 0:
-                idx = 0
-                for op in operands:
-                    if op.type != 0:
-                        if op.type == 5:
-                            isValid = True
-                        
-                        if idx > 0:
-                            #
-                            #   More than one operand
-                            #
-                            isVAlid = False
-                    idx += 1
-    
-    return isValid
-
 def CleanupPatchArea(Start_ea, Size):
     '''
         @brief Delete instructuions that may exist where a patched instruction is 
@@ -198,98 +86,6 @@ def CleanupPatchArea(Start_ea, Size):
         del_items(Start_ea+idx,1)
 
     plan_and_wait(Start_ea,Size)
-
-
-def CheckValidTargettingInstr(Curr_insn_t, Expected_mnem):
-    '''
-        @detail Takes a push, jz, jnz, instruction and verifies that the operand
-                 and the target of the address is valid.
-           
-        @returns BOOL           
-    '''
-
-    isValid = False
-
-    mnem = Expected_mnem.lower()
-
-    #print type(Curr_insn_t), Expected_mnem
-
-    if (type(Curr_insn_t) == ida_ua.insn_t) and (mnem in ['push', 'jz', 'jnz']) :
-        #
-        #   Typecheck for Curr_insn_t
-        #
-    #print "valid check 0"
-    
-        insn_ea = Curr_insn_t.ea
-        insn_dism = generate_disasm_line(insn_ea,1)
-
-        if mnem in insn_dism[:5]:
-            #
-            #   Ensure expected mnemonic in disassembly
-            #
-            
-            #print "valid check 1"
-            #
-            #   There shoud be a single populated operand in the ops array
-            #    I believe I read that the array always contains 8 op_t objects ( could be x86 only )
-            #    Only the one at idx 0 should have a type other than 0.
-            #
-            operands = Curr_insn_t.ops
-            if len(operands) > 0:
-                #print "valid check 2"
-                for op in operands:
-                    if op.type != 0:
-                        if (op.type in [5, 6, 7]) and (not isValid):
-                            #
-                            #  Type is an immediate, immediate far address, immediate near address
-                            #
-
-                            if op.type == 5:
-                                target_ea = op.value
-                            elif op.type == 6 or op.type == 7:
-                                target_ea = op.addr
-                            #print "valid check 3", hex(insn_ea), hex(target_ea) 
-                            if CheckCodeSegment(insn_ea, target_ea):
-                                #
-                                #   Located in the correct segment
-                                #
-
-                                #print "valid check 4"
-                                isValid = True
-                        elif isValid:
-                            #
-                            #   If other operand type
-                            #
-                            #print "valid check 5"
-                            isValid = False
-                            break
-
-
-    return isValid
-
-def CheckValidTarget(Curr_ea, Target_ea):
-    '''
-        @detail Take the address from the target of a current JMP instruction and verify that the 
-                 operand type is immediate (5), the target address is located within the .text section, 
-                 and check for other xrefs.
-
-                 The xref check may not be needed, so it has not been implemented.
-        
-        @returns BOOL
-    '''
-
-    valid_jump_target = False
-    instr_operand = DecodeInstruction(Curr_ea).Op1
-
-    if instr_operand.type in [5, 6, 7]:
-        #
-        #  Type is an immediate, immediate far address, immediate near address
-        #
-        
-        if CheckCodeSegment(Curr_ea, Target_ea):
-            valid_jump_target = True
-
-    return valid_jump_target
 
 def CheckJCCSameEdge(jcc_ea1, jcc_ea2):
     '''
@@ -343,11 +139,11 @@ def FindCallTypeOneCFGObfuscation():
         push_instr_ea = cfg1_ea
         push_insn = ida_ua.insn_t()
         ida_ua.decode_insn(push_insn, push_instr_ea)
-        push_insn_target_ea = GetInstuctionTargetAddress(push_insn)
+        push_insn_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(push_insn)
 
         #print "Find Type One 1: 0x%08x, target 0x%08x" % (cfg1_ea, push_insn_target_ea)
         
-        if CheckValidTargettingInstr(push_insn, "push"):
+        if maze_deobf_utils.CheckValidTargettingInstr(push_insn, "push"):
             #print "Find Type One 2: 0x%08x" % cfg1_ea
 
             jmp_instr_ea = push_instr_ea + push_insn.size
@@ -401,7 +197,7 @@ def PatchCallTypeOneCFGObfuscation(instr_ea):
     #
     push_insn = ida_ua.insn_t()
     ida_ua.decode_insn(push_insn, push_instr_ea)
-    push_insn_target = GetInstuctionTargetAddress(push_insn)
+    push_insn_target = maze_deobf_utils.GetInstuctionTargetAddress(push_insn)
 
     #
     #   Get JMP instruction data
@@ -500,7 +296,7 @@ def FindCallTypeTwoCFGObfuscation():
        
         push_insn = ida_ua.insn_t()
         ida_ua.decode_insn(push_insn, push_instr_ea)
-        if CheckValidTargettingInstr(push_insn, "push"):
+        if maze_deobf_utils.CheckValidTargettingInstr(push_insn, "push"):
             
             push_op = push_insn.ops[0]
 
@@ -508,7 +304,7 @@ def FindCallTypeTwoCFGObfuscation():
             jz_insn = ida_ua.insn_t()
             ida_ua.decode_insn(jz_insn, jz_ea)
 
-            if CheckValidTargettingInstr(jz_insn, "jz"):
+            if maze_deobf_utils.CheckValidTargettingInstr(jz_insn, "jz"):
                 jz_op = jz_insn.ops[0]
 
                 #
@@ -524,7 +320,7 @@ def FindCallTypeTwoCFGObfuscation():
                 jnz_insn = ida_ua.insn_t()
                 ida_ua.decode_insn(jnz_insn, jnz_ea)
 
-                if CheckValidTargettingInstr(jnz_insn, "jnz"):
+                if maze_deobf_utils.CheckValidTargettingInstr(jnz_insn, "jnz"):
                     jnz_op = jnz_insn.ops[0]
 
                     #
@@ -575,12 +371,12 @@ def PatchCallTypeTwoCFGObfuscation(instr_ea):
 
     push_insn = ida_ua.insn_t()
     ida_ua.decode_insn(push_insn, push_instr_ea)
-    push_insn_target = GetInstuctionTargetAddress(push_insn)
+    push_insn_target = maze_deobf_utils.GetInstuctionTargetAddress(push_insn)
 
     jz_instr_ea = push_instr_ea+push_insn.size
     jz_insn = ida_ua.insn_t()
     ida_ua.decode_insn(jz_insn, jz_instr_ea)
-    jz_insn_target = GetInstuctionTargetAddress(jz_insn)
+    jz_insn_target = maze_deobf_utils.GetInstuctionTargetAddress(jz_insn)
 
     jnz_instr_ea = jz_instr_ea + jz_insn.size
     jnz_insn = ida_ua.insn_t()
@@ -686,14 +482,14 @@ def WalkCallTypeThreeControlFlow(CallAddress, StartAddress):
         jnz_insn = ida_ua.insn_t()
         ida_ua.decode_insn(jnz_insn, jnz_ea)
 
-        if not CheckValidTargettingInstr(jnz_insn, "jnz"):
+        if not maze_deobf_utils.CheckValidTargettingInstr(jnz_insn, "jnz"):
             '''
                 Break out of the loop if the instruction is not a JNZ
             '''
             print "Failed at %08x" % jnz_ea
             break
 
-        jnz_call_target_ea = GetInstuctionTargetAddress(jnz_insn)
+        jnz_call_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(jnz_insn)
 
         if jnz_call_target_ea == CallAddress:
             is_cal_type_three = True
@@ -743,7 +539,7 @@ def FindCallTypeThreeCFGObfuscation():
        
         push_insn = ida_ua.insn_t()
         ida_ua.decode_insn(push_insn, push_instr_ea)
-        if CheckValidTargettingInstr(push_insn, "push"):
+        if maze_deobf_utils.CheckValidTargettingInstr(push_insn, "push"):
             
             push_op = push_insn.ops[0]
 
@@ -751,20 +547,20 @@ def FindCallTypeThreeCFGObfuscation():
             jz_insn = ida_ua.insn_t()
             ida_ua.decode_insn(jz_insn, jz_ea)
 
-            if CheckValidTargettingInstr(jz_insn, "jz"):
+            if maze_deobf_utils.CheckValidTargettingInstr(jz_insn, "jz"):
                 #
                 #   Get the target address for the first JZ
                 #   
                 
-                jz_calltarget_ea = GetInstuctionTargetAddress(jz_insn)
+                jz_calltarget_ea = maze_deobf_utils.GetInstuctionTargetAddress(jz_insn)
 
                 jnz_ea = jz_ea + jz_insn.size
                 jnz_insn = ida_ua.insn_t()
                 ida_ua.decode_insn(jnz_insn, jnz_ea)
 
-                if CheckValidTargettingInstr(jnz_insn, "jnz"):
+                if maze_deobf_utils.CheckValidTargettingInstr(jnz_insn, "jnz"):
 
-                    jnz_calltarget_ea = GetInstuctionTargetAddress(jnz_insn)
+                    jnz_calltarget_ea = maze_deobf_utils.GetInstuctionTargetAddress(jnz_insn)
 
                     if jnz_calltarget_ea != jz_calltarget_ea:
                         #
@@ -788,7 +584,7 @@ def PatchJZJNZControlFlow(StartAddress, TargetAddress=0):
     jnz_ea = StartAddress
     jnz_insn = ida_ua.insn_t()
     ida_ua.decode_insn(jnz_insn, jnz_ea)
-    jnz_insn_target_ea = GetInstuctionTargetAddress(jnz_insn)
+    jnz_insn_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(jnz_insn)
 
     #
     #   Handle JZ instruction
@@ -796,13 +592,13 @@ def PatchJZJNZControlFlow(StartAddress, TargetAddress=0):
     jz_insn_ea = jnz_ea + jnz_insn.size
     jz_insn = ida_ua.insn_t()
     ida_ua.decode_insn(jz_insn, jz_insn_ea)
-    jz_insn_target_ea = GetInstuctionTargetAddress(jz_insn)
+    jz_insn_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(jz_insn)
 
 
-    if CheckValidTargettingInstr(jnz_ea, "jnz"):
+    if maze_deobf_utils.CheckValidTargettingInstr(jnz_ea, "jnz"):
         ZeroOutInstruction(jnz_insn)
 
-    if CheckValidTargettingInstr(jz_insn_ea, "jz"):
+    if maze_deobf_utils.CheckValidTargettingInstr(jz_insn_ea, "jz"):
         ZeroOutInstruction(jz_insn)
     
 
@@ -839,7 +635,7 @@ def WalkAndPatchJZJNZControlFlow(TargetAddress, StartAddress):
         jnz_insn = ida_ua.insn_t()
         ida_ua.decode_insn(jnz_insn, jnz_ea)
 
-        if CheckValidTargettingInstr(jnz_insn, "jnz"):
+        if maze_deobf_utils.CheckValidTargettingInstr(jnz_insn, "jnz"):
             '''
                 Current instruction is JNZ with valid target address
             '''
@@ -847,8 +643,8 @@ def WalkAndPatchJZJNZControlFlow(TargetAddress, StartAddress):
             #
             #   Patch control flow iff the JNZ target is also a JNZ
             #
-            jnz_target_ea = GetInstuctionTargetAddress(jnz_insn)
-            if CheckValidTargettingInstr(jnz_target_ea, "jnz"):
+            jnz_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(jnz_insn)
+            if maze_deobf_utils.CheckValidTargettingInstr(jnz_target_ea, "jnz"):
                 print "WalkAndPatchJZJNZControlFlow, patch: %08x, Target Address: %08x" % (jnz_calljnz_target_ea_target_ea, TargetAddress)
                 PatchJZJNZControlFlow(jnz_target_ea, TargetAddress)
             
@@ -885,7 +681,7 @@ def PatchCallTypeThreeCFGObfuscation(Instr_ea):
     push_instr_ea = Instr_ea
     push_insn = ida_ua.insn_t()
     ida_ua.decode_insn(push_insn, push_instr_ea)
-    push_insn_target = GetInstuctionTargetAddress(push_insn)
+    push_insn_target = maze_deobf_utils.GetInstuctionTargetAddress(push_insn)
 
     deobf_jmp_target_ea = push_insn_target
 
@@ -895,7 +691,7 @@ def PatchCallTypeThreeCFGObfuscation(Instr_ea):
     jz_insn_ea = push_instr_ea + push_insn.size
     jz_insn = ida_ua.insn_t()
     ida_ua.decode_insn(jz_insn, jz_insn_ea)
-    jz_insn_target_ea = GetInstuctionTargetAddress(jz_insn)
+    jz_insn_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(jz_insn)
 
     deobf_call_target_ea = jz_insn_target_ea
 
@@ -1002,12 +798,15 @@ def FindAbsoluteJumps():
 
     addr_list = set()
 
+    abs_jmp_list = set()
+
     obfuscated_list = []
 
     abs_jmp_ea = ida_search.find_binary(0, end_ea, jz_short_jmp, 0, SEARCH_DOWN | SEARCH_CASE)
     while abs_jmp_ea != idc.BADADDR: 
-        print "Short jump: %08x" % abs_jmp_ea
+        #print "Short jump: %08x" % abs_jmp_ea
         obfuscated_list.append(abs_jmp_ea)
+        abs_jmp_list.add(abs_jmp_ea)
         abs_jmp_ea =ida_search.find_binary(abs_jmp_ea+4, end_ea,  jz_short_jmp, 0, SEARCH_DOWN | SEARCH_CASE)
     
     abs_jmp_ea = ida_search.find_binary(0, end_ea, jz_near_jmp, 0, SEARCH_DOWN | SEARCH_CASE)
@@ -1022,6 +821,17 @@ def FindAbsoluteJumps():
     
     
     #print "[START] Find absolute jumps."
+
+    for abs_jmp_ea in abs_jmp_list:
+        #print "Short jump: %08x,   %s" % (abs_jmp_ea, generate_disasm_line(abs_jmp_ea,1))
+        jz_insn_ea = abs_jmp_ea
+        jz_insn = ida_ua.insn_t()
+        ida_ua.decode_insn(jz_insn, jz_insn_ea)
+
+        op = jz_insn.ops[0]
+        if op.addr - abs_jmp_ea < 4:
+            print "Short jump: %08x,   %s" % (abs_jmp_ea, generate_disasm_line(abs_jmp_ea,1))
+        
     
     for abs_jmp_ea in obfuscated_list:
         #
@@ -1036,12 +846,12 @@ def FindAbsoluteJumps():
         ida_ua.decode_insn(jz_insn, jz_insn_ea)
 
         #print "%08x - check" % abs_jmp_ea
-        if CheckValidTargettingInstr(jz_insn, "jz"):
+        if maze_deobf_utils.CheckValidTargettingInstr(jz_insn, "jz"):
 
             prev_insn_ea = jz_insn_ea - 5
             prev_insn = ida_ua.insn_t()
             ida_ua.decode_insn(prev_insn, prev_insn_ea)
-            if CheckValidTargettingInstr(prev_insn, "push"):
+            if maze_deobf_utils.CheckValidTargettingInstr(prev_insn, "push"):
                 #
                 # if previous instruction is a push <address>, 
                 #   this is an obfuscated call, skip to next located absolute jump
@@ -1057,7 +867,7 @@ def FindAbsoluteJumps():
             ida_ua.decode_insn(jnz_insn, jnz_insn_ea)
 
             #print "%08x - JZ" % abs_jmp_ea
-            if CheckValidTargettingInstr(jnz_insn, "jnz"):
+            if maze_deobf_utils.CheckValidTargettingInstr(jnz_insn, "jnz"):
                 #
                 #   Absolute JMP found
                 #
@@ -1091,7 +901,7 @@ def FollowJNZForAbsoluteJumpTarget(Insn_ea):
             #
             jnz_insn = ida_ua.insn_t()
             ida_ua.decode_insn(jnz_insn, jnz_insn_ea)
-            jnz_insn_target_ea = GetInstuctionTargetAddress(jnz_insn)
+            jnz_insn_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(jnz_insn)
 
             #
             #   Get disassembly for JNZ target
@@ -1136,7 +946,7 @@ def PatchAbsoluteJump(Insn_ea):
     #
     jz_insn = ida_ua.insn_t()
     ida_ua.decode_insn(jz_insn, jz_insn_ea)
-    jz_insn_target_ea = GetInstuctionTargetAddress(jz_insn)
+    jz_insn_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(jz_insn)
 
     #
     #   Get JNZ Instruction
@@ -1144,7 +954,7 @@ def PatchAbsoluteJump(Insn_ea):
     jnz_insn_ea = jz_insn_ea + jz_insn.size
     jnz_insn = ida_ua.insn_t()
     ida_ua.decode_insn(jnz_insn, jnz_insn_ea)
-    jnz_insn_target_ea = GetInstuctionTargetAddress(jnz_insn)
+    jnz_insn_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(jnz_insn)
 
     abs_jmp_ea = jz_insn_ea + jz_insn.size
     abs_jmp_target_ea = FollowJNZForAbsoluteJumpTarget(jnz_insn_target_ea)
@@ -1224,14 +1034,14 @@ def FindObfuscatedWindowsAPICalls():
         ida_ua.decode_insn(first_push_insn, first_push_instr_ea)
 
         #print "First Push %08x" % first_push_instr_ea
-        if CheckValidInstrImmediate(first_push_insn,"push"):
+        if maze_deobf_utils.CheckValidInstrImmediate(first_push_insn,"push"):
             
             second_push_instr_ea = first_push_instr_ea + first_push_insn.size
             second_push_insn = ida_ua.insn_t()
             ida_ua.decode_insn(second_push_insn, second_push_instr_ea)
 
             #print "Second Push %08x" % second_push_instr_ea
-            if CheckValidInstrImmediate(second_push_insn,"push"):
+            if maze_deobf_utils.CheckValidInstrImmediate(second_push_insn,"push"):
 
                 call_instr_ea = second_push_instr_ea + second_push_insn.size
                 call_insn = ida_ua.insn_t()
@@ -1241,14 +1051,14 @@ def FindObfuscatedWindowsAPICalls():
                 #print "Call %08x" % call_instr_ea
                 if call_insn_disasm.startswith("call"):
 
-                    call_insn_target_ea = GetInstuctionTargetAddress(call_insn)
+                    call_insn_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(call_insn)
                     #print "Call target %08x" % call_insn_target_ea
-                    if CheckValidTarget(call_instr_ea, call_insn_target_ea): 
+                    if maze_deobf_utils.CheckValidTarget(call_instr_ea, call_insn_target_ea): 
 
                         module_name_ea = call_instr_ea + call_insn.size
                         
                         #print "Module Name %08x" % module_name_ea
-                        if CheckIsDllName(module_name_ea):
+                        if maze_deobf_utils.CheckIsDllName(module_name_ea):
                             addr_list.add(first_push_instr_ea)
 
         #
@@ -1310,7 +1120,7 @@ def PatchObfuscatedWindowsAPICalls(Insn_ea):
     #
     orig_call_insn = ida_ua.insn_t()
     ida_ua.decode_insn(orig_call_insn, orig_call_ea)
-    orig_call_target_ea = GetInstuctionTargetAddress(orig_call_insn)
+    orig_call_target_ea = maze_deobf_utils.GetInstuctionTargetAddress(orig_call_insn)
 
     module_name_ea = orig_call_ea + orig_call_insn.size
 
@@ -1324,11 +1134,11 @@ def PatchObfuscatedWindowsAPICalls(Insn_ea):
     #
     #   Get address of find library and return address
     #
-    if CheckValidTargettingInstr(push_ret_addr_insn,"push"):
+    if maze_deobf_utils.CheckValidTargettingInstr(push_ret_addr_insn,"push"):
 
         #print "Type6 push: %08x" % push_retaddr_insn_ea
 
-        findlibrary_return_address = GetInstuctionTargetAddress(push_ret_addr_insn)
+        findlibrary_return_address = maze_deobf_utils.GetInstuctionTargetAddress(push_ret_addr_insn)
 
         
         
@@ -1339,11 +1149,11 @@ def PatchObfuscatedWindowsAPICalls(Insn_ea):
         findlibrary_jz_insn = ida_ua.insn_t()
         ida_ua.decode_insn(findlibrary_jz_insn, findlibrary_jz_ea)
 
-        if CheckValidTargettingInstr(findlibrary_jz_insn,"jz"):
+        if maze_deobf_utils.CheckValidTargettingInstr(findlibrary_jz_insn,"jz"):
             
             #print "Type6 jz: %08x" % findlibrary_jz_ea
 
-            findlibrary_address =  GetInstuctionTargetAddress(findlibrary_jz_insn)
+            findlibrary_address =  maze_deobf_utils.GetInstuctionTargetAddress(findlibrary_jz_insn)
 
             push_modulename_insn_ea = orig_call_ea
             call_find_library_ea = orig_call_ea + 5
@@ -1358,7 +1168,7 @@ def PatchObfuscatedWindowsAPICalls(Insn_ea):
             findlibrary_jnz_ea = findlibrary_jz_ea + findlibrary_jz_insn.size
             findlibrary_jnz_insn = ida_ua.insn_t()
             ida_ua.decode_insn(findlibrary_jnz_insn, findlibrary_jnz_ea)
-            jnz_calllibrary_target = GetInstuctionTargetAddress(findlibrary_jnz_insn)
+            jnz_calllibrary_target = maze_deobf_utils.GetInstuctionTargetAddress(findlibrary_jnz_insn)
 
             #
             #   Prepare module name related addresses
@@ -1890,7 +1700,7 @@ def BuildFunctions(FunctionPrologues, FunctionEpilogues):
         rec_descent = maze_functions.RecursiveDescent(prologue_ea)
         rec_descent.DoDescentParser(prologue.connected_epilogues)
 
-        plan_and_wait(prologue_ea,function_end_ea,0) 
+        #plan_and_wait(prologue_ea,function_end_ea,0) 
 
         #
         #   Create function
@@ -2122,10 +1932,10 @@ def main():
                 #break
         
         absolute_jumps = FindAbsoluteJumps()
-        if len(absolute_jumps) > 0:
+        if len(absolute_jumps) > 0 and do_patches:
             for absolut_jmp_ea in absolute_jumps:
                 print "Absolute Jump: %08x" % (absolut_jmp_ea)
-                #PatchAbsoluteJump(absolut_jmp_ea)
+                PatchAbsoluteJump(absolut_jmp_ea)
                 #break
     
     

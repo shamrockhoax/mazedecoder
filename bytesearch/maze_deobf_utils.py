@@ -2,12 +2,16 @@ import idautils, idaapi, idc, ida_search, ida_ua, ida_name
 
 def CheckInSegment(Curr_ea, Target_ea):
     '''
-        @brief Check if the Target_ea is in the same segment as the Curr_ea. 
+        @brief Check if the Target_ea is in the same segment as the Curr_ea and that it is SEG_CODE
     '''
 
-    #print "segcheck", Target_ea >= get_segm_start(Curr_ea), Target_ea <= get_segm_end(Curr_ea)
+    curr_segm_start_ea = idc.get_segm_start(Curr_ea) 
+    curr_segm_end_ea = idc.get_segm_end(Curr_ea)
 
-    return Target_ea >= idc.get_segm_start(Curr_ea) and Target_ea <= idc.get_segm_end(Curr_ea)
+    return Target_ea >= curr_segm_start_ea and Target_ea <= curr_segm_end_ea
+
+def CheckSegmentIsCode(Curr_ea):
+    return idc.get_segm_attr(Curr_ea, idc.SEGATTR_TYPE) == idc.SEG_CODE
 
 def CheckValidInstrImmediate(Curr_insn_t, Expected_mnem):
     '''
@@ -49,10 +53,10 @@ def CheckValidInstrImmediate(Curr_insn_t, Expected_mnem):
 def CheckValidTarget(Curr_ea, Target_ea):
     '''
         @detail Take the address from the target of a current JMP instruction and verify that the 
-                 operand type is immediate (5), the target address is located within the .text section, 
-                 and check for other xrefs.
+                 operand type is immediate (5), the target address is located within the the same section,
+                 the segment is code.
 
-                 The xref check may not be needed, so it has not been implemented.
+                 Not implemented: an xref check may be needed
         
         @returns BOOL
     '''
@@ -65,7 +69,7 @@ def CheckValidTarget(Curr_ea, Target_ea):
         #  Type is an immediate, immediate far address, immediate near address
         #
         
-        if CheckInSegment(Curr_ea, Target_ea):
+        if CheckInSegment(Curr_ea, Target_ea) and CheckSegmentIsCode(Curr_ea):
             valid_jump_target = True
 
     return valid_jump_target
@@ -119,7 +123,7 @@ def CheckValidTargettingInstr(Curr_insn_t, Expected_mnem):
                             elif op.type == 6 or op.type == 7:
                                 target_ea = op.addr
                             #print "valid check 3", hex(insn_ea), hex(target_ea) 
-                            if CheckInSegment(insn_ea, target_ea):
+                            if CheckInSegment(insn_ea, target_ea) and CheckSegmentIsCode(insn_ea):
                                 #
                                 #   Located in the correct segment
                                 #
