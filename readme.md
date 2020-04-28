@@ -6,6 +6,7 @@
 This is the source code related to my blogpost published over at [Crowdstrike's blog](). Forgive me, but currently the source code is written using Python 2.7. 
 
 * Bytesearch Method
+   * Relies upon searching for specific bytes to identify the obfuscations
    * bytesearch/maze_cfg_cleanup.py
        * Execute this script to decode the IDB
 
