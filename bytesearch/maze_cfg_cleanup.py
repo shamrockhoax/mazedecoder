@@ -774,17 +774,28 @@ def PatchCallTypeThreeCFGObfuscation(Instr_ea):
 
 def FindAbsoluteJumps():
     """
-        @brief  Locates Type One and Type Two absolute jumps.
+        @brief  Locates short JZ, near JZ, and near JNZ obfuscations.
 
-        @detail Locates Type One and Type Two absolute jumps. There is no need to worry about 
-                 any of the located instruction matching the CALL obfuscations, those have already 
-                 been dealt with. 
+        @detail Locates short JZ, near JZ, and near JNZ obfuscations. For example:
 
-                0000    <two-byte/four-byte opcode>   JZ      xxxxxxxx
-                0001    <two-byte/four-byte opcode>   JNZ     <address of another JNZ/JZ block, or address of next non-JNZ instruction>
+            000: 74 55                        jz      short loc_6E456049
+            002: 75 04                        jnz     short loc_008
+            004: 0E                           push    cs
+            005: 02 00                        add     al, [eax]
+            ;-----------------------------------------------------------
+            007: 00                           db    0              
+            ;-----------------------------------------------------------
+            008: 75 0A                        jnz     short loc_6E456006
+            00A: 74 04                        jz      short loc_6E456002
+            00C: DB 1A                        fistp   dword ptr [edx] 
+
+            This obfuscation is actually an absolute jump. In some occasions, there are multiple sequences of these 
+             JZ/JNZ obfuscations chained together. This will only find the obfuscations, the distinction between each 
+             isn't important until it comes time to deobfuscate. 
             
-            If JZ falls through, JNZ jumps to a valid instruction that is not JNZ. This is just a 
-            JMP instruction spread out across multiple JZ -> JNZ -> yyyyyyyy blocks. 
+            "74 ? 75" type short jumps can cause issues because the byte-search is generic and can hit on things that are not
+             instructions. Verfiication is done to determined if the match is in a CODE segment. This will help avoid hitting on 
+             strings located in data segments. 
 
         @return     A list containing each address for the located JZ/JNZ obfuscation
 
@@ -806,7 +817,6 @@ def FindAbsoluteJumps():
     while abs_jmp_ea != idc.BADADDR: 
         #print "Short jump: %08x" % abs_jmp_ea
         obfuscated_list.append(abs_jmp_ea)
-        abs_jmp_list.add(abs_jmp_ea)
         abs_jmp_ea =ida_search.find_binary(abs_jmp_ea+4, end_ea,  jz_short_jmp, 0, SEARCH_DOWN | SEARCH_CASE)
     
     abs_jmp_ea = ida_search.find_binary(0, end_ea, jz_near_jmp, 0, SEARCH_DOWN | SEARCH_CASE)
@@ -821,16 +831,6 @@ def FindAbsoluteJumps():
     
     
     #print "[START] Find absolute jumps."
-
-    for abs_jmp_ea in abs_jmp_list:
-        #print "Short jump: %08x,   %s" % (abs_jmp_ea, generate_disasm_line(abs_jmp_ea,1))
-        jz_insn_ea = abs_jmp_ea
-        jz_insn = ida_ua.insn_t()
-        ida_ua.decode_insn(jz_insn, jz_insn_ea)
-
-        op = jz_insn.ops[0]
-        if op.addr - abs_jmp_ea < 4:
-            print "Short jump: %08x,   %s" % (abs_jmp_ea, generate_disasm_line(abs_jmp_ea,1))
         
     
     for abs_jmp_ea in obfuscated_list:
@@ -847,6 +847,7 @@ def FindAbsoluteJumps():
 
         #print "%08x - check" % abs_jmp_ea
         if maze_deobf_utils.CheckValidTargettingInstr(jz_insn, "jz"):
+
 
             prev_insn_ea = jz_insn_ea - 5
             prev_insn = ida_ua.insn_t()
