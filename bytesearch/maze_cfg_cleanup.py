@@ -246,7 +246,7 @@ def PatchCallTypeOneCFGObfuscation(instr_ea):
     
 
     
-    #plan_and_wait(patch_call_ea, patch_call_ea+jmp_insn.size)
+    plan_and_wait(patch_call_ea, patch_call_ea+jmp_insn.size)
 
     #
     #   Make JMP destination code
@@ -255,7 +255,7 @@ def PatchCallTypeOneCFGObfuscation(instr_ea):
     jmp_target_insn = ida_ua.insn_t()
     ida_ua.decode_insn(jmp_target_insn, patch_jmp_target_ea)
     create_insn(patch_jmp_target_ea)
-    #plan_and_wait(patch_jmp_target_ea, patch_jmp_target_ea+jmp_target_insn.size)
+    plan_and_wait(patch_jmp_target_ea, patch_jmp_target_ea+jmp_target_insn.size)
 
 
 def FindCallTypeTwoCFGObfuscation():
@@ -440,7 +440,7 @@ def PatchCallTypeTwoCFGObfuscation(instr_ea):
     #   Redifine NOP; CALL; JMP
     #
     create_insn(push_instr_ea)
-    #plan_and_wait(push_instr_ea, push_instr_ea+1)
+    plan_and_wait(push_instr_ea, push_instr_ea+1)
 
     #
     #   Make JUMP Target Code
@@ -449,7 +449,7 @@ def PatchCallTypeTwoCFGObfuscation(instr_ea):
     jmp_target_insn = ida_ua.insn_t()
     ida_ua.decode_insn(jmp_target_insn, jmp_target)
     create_insn(jmp_target)
-    #plan_and_wait(jmp_target, jmp_target+jmp_target_insn.size)
+    plan_and_wait(jmp_target, jmp_target+jmp_target_insn.size)
 
     #
     #   Make Call Target Code
@@ -458,7 +458,7 @@ def PatchCallTypeTwoCFGObfuscation(instr_ea):
     call_target_insn = ida_ua.insn_t()
     ida_ua.decode_insn(call_target_insn, call_target)
     create_insn(call_target)
-    #plan_and_wait(call_target, call_target+call_target_insn.size)
+    plan_and_wait(call_target, call_target+call_target_insn.size)
 
 def WalkCallTypeThreeControlFlow(CallAddress, StartAddress):
     '''
@@ -752,7 +752,7 @@ def PatchCallTypeThreeCFGObfuscation(Instr_ea):
     #   Make instructions starting with the first NOP (push_instr_ea)
     #
     create_insn(push_instr_ea)
-    #plan_and_wait(push_instr_ea, push_instr_ea+push_insn.size)
+    plan_and_wait(push_instr_ea, push_instr_ea+push_insn.size)
 
     #
     #   Make JMP destination code
@@ -761,7 +761,7 @@ def PatchCallTypeThreeCFGObfuscation(Instr_ea):
     deobf_jmp_dst_insn = ida_ua.insn_t()
     ida_ua.decode_insn(deobf_jmp_dst_insn, deobf_jmp_target_ea)
     create_insn(deobf_jmp_target_ea)
-    #plan_and_wait(deobf_jmp_target_ea, deobf_jmp_target_ea+deobf_jmp_dst_insn.size)
+    plan_and_wait(deobf_jmp_target_ea, deobf_jmp_target_ea+deobf_jmp_dst_insn.size)
 
     #
     #   Make CALL destination code
@@ -770,7 +770,7 @@ def PatchCallTypeThreeCFGObfuscation(Instr_ea):
     deobf_call_dst_insn = ida_ua.insn_t()
     ida_ua.decode_insn(deobf_call_dst_insn, deobf_call_target_ea)
     create_insn(deobf_call_target_ea)
-    #plan_and_wait(deobf_call_target_ea, deobf_call_target_ea+deobf_call_dst_insn.size)
+    plan_and_wait(deobf_call_target_ea, deobf_call_target_ea+deobf_call_dst_insn.size)
 
 def FindAbsoluteJumps():
     """
@@ -1701,7 +1701,7 @@ def BuildFunctions(FunctionPrologues, FunctionEpilogues):
         rec_descent = maze_functions.RecursiveDescent(prologue_ea)
         rec_descent.DoDescentParser(prologue.connected_epilogues)
 
-        #plan_and_wait(prologue_ea,function_end_ea,0) 
+        plan_and_wait(prologue_ea,function_end_ea,0) 
 
         #
         #   Create function
@@ -1898,26 +1898,35 @@ def main():
     calltypethree_addresses = set()
     absolute_jumps = set()
 
+    #
+    #   Generate a list of functions prior to removing deobfuscations
+    #
+    prev_state_func_list = []
+    for func_ea in idautils.Functions():
+        func = ida_funcs.get_func(func_ea)
+        prev_state_func_list.append( func )
+
+
 
     find_obfuscations = True
-    do_patches = False
+    do_patches = True
     
     if find_obfuscations: 
-        #obf_windowsapi_calls = FindObfuscatedWindowsAPICalls()
+        obf_windowsapi_calls = FindObfuscatedWindowsAPICalls()
         if len(obf_windowsapi_calls) > 0 and do_patches:
             for obf_windowsapi_call_ea in obf_windowsapi_calls:
                 print "Windows API Call: %08x" % obf_windowsapi_call_ea
                 PatchObfuscatedWindowsAPICalls(obf_windowsapi_call_ea)
                 #break
         
-        #typetwo_addresses = FindCallTypeTwoCFGObfuscation()    
+        typetwo_addresses = FindCallTypeTwoCFGObfuscation()    
         if len(typetwo_addresses) > 0 and do_patches:
             for typetwo_ea in typetwo_addresses:
                 print "Call Type Two: %08x" % (typetwo_ea)
                 PatchCallTypeTwoCFGObfuscation(typetwo_ea)
                 #break
         
-        #typeone_addresses = FindCallTypeOneCFGObfuscation()
+        typeone_addresses = FindCallTypeOneCFGObfuscation()
         if len(typeone_addresses) > 0 and do_patches:
             #print len(typeone_addresses)
             for typeone_ea in typeone_addresses:
@@ -1925,7 +1934,7 @@ def main():
                 PatchCallTypeOneCFGObfuscation(typeone_ea)
         #       #break
 
-        #calltypethree_addresses = FindCallTypeThreeCFGObfuscation()
+        calltypethree_addresses = FindCallTypeThreeCFGObfuscation()
         if len(calltypethree_addresses) and do_patches:
             for typethree_ea in calltypethree_addresses:
                 print "Call Type Three: %08x" % (typethree_ea)
@@ -1940,14 +1949,35 @@ def main():
                 #break
     
     
-    #typeone_epilogues, epilogue_immediates = GetFunctionEpiloguesOne()
-    #typeone_prologues = GetFunctionProloguesOne(epilogue_immediates,typeone_epilogues)
-    #BuildFunctions(typeone_prologues,typeone_epilogues)
+    typeone_epilogues, epilogue_immediates = GetFunctionEpiloguesOne()
+    typeone_prologues = GetFunctionProloguesOne(epilogue_immediates,typeone_epilogues)
+    BuildFunctions(typeone_prologues,typeone_epilogues)
 
-    #CheckAllFunctionsEndAddresses(typeone_prologues,typeone_epilogues)
+    CheckAllFunctionsEndAddresses(typeone_prologues,typeone_epilogues)
     
     #BuildFunctions2(typeone_prologues, typeone_epilogues)
     #CheckAllFunctionsEndAddresses2()
+
+    #
+    #   Generate a list of functions after removing deobfuscations
+    #
+    post_state_func_list = []
+    for func_ea in idautils.Functions():
+        func = ida_funcs.get_func(func_ea)
+        post_state_func_list.append(func.end_ea)
+    
+    
+    #
+    #   This chunk of code is used to redifine functions that were correctly defined
+    #    prior to the IDB
+    #
+    missing_funcs = []
+    for func in prev_state_func_list:
+        if func.end_ea not in post_state_func_list:
+            missing_funcs.append(func)
+
+    for func in missing_funcs:
+        print "Addr: %08x" % func.start_ea
     
     #print "Number of Type One epilogues: %d" % len(typeone_epilogues.keys())
     #print "Number of Type One prologues: %d" % len(typeone_prologues.keys())

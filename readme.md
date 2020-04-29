@@ -5,14 +5,16 @@
 # Deobfuscating Maze's Control Flow Obfuscations
 This is the source code related to my blogpost published over at [Crowdstrike's blog](). Forgive me, but currently the source code is written using Python 2.7.
 
-**Approaches**
+## Deobfuscation Methods
 
-Currently, only the Byte-search Method discussed in the blog post is covered. Eventually, I'd like to add a few other approaches. 
+Currently, only the Byte-search Method discussed in the blog post is covered. Eventually, I'd like to add a few different methods. 
 
-* Bytesearch Method
-   * Relies upon searching for specific bytes to identify the obfuscations
-   * bytesearch/maze_cfg_cleanup.py
-       * Execute this script to decode the IDB
+### Bytesearch Method
+* Relies upon searching for specific bytes to identify the obfuscations
+* Takes a bit to run, to many "plan_and_wait()" functions, and I print logs to the output window
+* Functions that don't get auto-defined after patching should now be definable in IDA via pressing 'p' 
+* bytesearch/maze_cfg_cleanup.py
+    * Execute this script to decode the IDB
 
  
 **Hashes**
