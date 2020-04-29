@@ -1909,7 +1909,7 @@ def main():
 
 
     find_obfuscations = True
-    do_patches = True
+    do_patches = False
     
     if find_obfuscations: 
         obf_windowsapi_calls = FindObfuscatedWindowsAPICalls()
