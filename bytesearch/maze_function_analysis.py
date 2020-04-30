@@ -44,22 +44,7 @@ class RecursiveDescent(object):
         '''
             @brief Walk the function leveraging a recursive descent parser
 
-            @detail Starting with a prologue walk each instruction until the associated epilogue is reached. For functions 
-                    with multiple epilogues, iterate over each one. 
-
-                    As each instruction is traversed, do the following three
-                    things:
-
-                        - Undefine the instruction
-                        - Mark the instruction as code
-                        - Check to see if the instruction is already a member of another function
-                    
-                    If an instruction is a member of another function, undefine that function and place it in a queue. At the end
-                     of traversing each function, a new function is going to be created with the new prologue and the new epilogue.
-                     In addition, the undefined function queue is going to be iterated over and each function will be redefined. This
-                     should clean up messy function
-                    
-                    much thanks to the author of "Practical Binary Analysis" for the break down of the algorithm in Chapter 8.
+            @detail Walks a function based on an Approach. This is unused in the byte-search implementation. 
         
                 @return function object
         '''
@@ -372,20 +357,8 @@ class RecursiveDescent(object):
         '''
             @brief Walk the function leveraging a recursive descent parser
 
-            @detail Starting with a prologue walk each instruction until the associated epilogue is reached. For functions 
-                    with multiple epilogues, iterate over each one. 
-
-                    As each instruction is traversed, do the following three
-                    things:
-
-                        - Undefine the instruction
-                        - Mark the instruction as code
-                        - Check to see if the instruction is already a member of another function
-                    
-                    If an instruction is a member of another function, undefine that function and place it in a queue. At the end
-                     of traversing each function, a new function is going to be created with the new prologue and the new epilogue.
-                     In addition, the undefined function queue is going to be iterated over and each function will be redefined. This
-                     should clean up messy function
+            @detail Starting at the entry point, it walks a function, creates a basic block, and associates those blocks with a 
+                     Function object. 
                     
                     much thanks to the author of "Practical Binary Analysis" for the break down of the algorithm in Chapter 8.
         
@@ -531,6 +504,8 @@ class Function(object):
 class Eumulators(object):
     '''
         @brief Identify and Deobfuscate the various obfuscations
+
+                Currently unused.
     '''
 
     def __init(self):
@@ -639,7 +614,7 @@ class BasicBlock(object):
 
 class FunctionEpilogue(object):
     '''
-        @brief  Describes a funciton epilogue
+        @brief  Describes a function epilogue
     '''    
 
     def __init__(self, BasicBlock, StackSpaceImmediate, Registers):
@@ -650,7 +625,7 @@ class FunctionEpilogue(object):
 
 class FunctionPrologue(object):
     '''
-        @brief  Describes a funciton epilogue
+        @brief  Describes a function prologue
     '''    
 
     def __init__(self, BasicBlock, StackSpaceImmediate, Registers):
@@ -659,4 +634,13 @@ class FunctionPrologue(object):
         self.stack_space_immediate = StackSpaceImmediate
         self.registers = Registers
 
+        #
+        #   Connected epilogues have been verified via walking the function
+        #
         self.connected_epilogues = []
+
+        #
+        #   Possible epilogues are address that are unverified addresses 
+        #    that could be an epilogue for this function. 
+        #
+        self.possible_epilogues = []

@@ -5,7 +5,7 @@ idaapi.require("maze_deobf_utils")
 """
     This file and the "maze_funtion_analysis.py" containd uplicate method and class names. 
      The "maze_funtion_analysis.py" is going to be the updated version of this file. 
-
+    
 """
 
 class RecursiveDescent(object):
@@ -82,7 +82,7 @@ class RecursiveDescent(object):
                 decode_result = ida_ua.decode_insn(curr_insn, curr_insn_ea)
                 if decode_result < 1:
                     # 
-                    #   break if instruction invalide
+                    #   break if instruction invalid
                     #
                     break
 
@@ -151,6 +151,8 @@ class RecursiveDescent(object):
         '''
             @brief Return the operand value for a unirary instruction that contains a target 
                     address (JMP, JNZ, JZ, push, call, etc).
+
+                    Can probably be deleted because the same function is in the "maze_deobf_utils.py" 
         '''
 
         target_ea = 0
@@ -207,7 +209,7 @@ class BasicBlock(object):
 
 class FunctionEpilogue(object):
     '''
-        @brief  Describes a funciton epilogue
+        @brief  Describes a function epilogue
     '''    
 
     def __init__(self, BasicBlock, StackSpaceImmediate, Registers):
@@ -218,7 +220,7 @@ class FunctionEpilogue(object):
 
 class FunctionPrologue(object):
     '''
-        @brief  Describes a funciton epilogue
+        @brief  Describes a function prologue
     '''    
 
     def __init__(self, BasicBlock, StackSpaceImmediate, Registers):
@@ -227,5 +229,13 @@ class FunctionPrologue(object):
         self.stack_space_immediate = StackSpaceImmediate
         self.registers = Registers
 
+        #
+        #   Connected epilogues have been verified via walking the function
+        #
         self.connected_epilogues = []
+
+        #
+        #   Possible epilogues are address that are unverified addresses 
+        #    that could be an epilogue for this function. 
+        #
         self.possible_epilogues = []

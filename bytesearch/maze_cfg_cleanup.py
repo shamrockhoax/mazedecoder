@@ -1324,14 +1324,6 @@ def WalkBasicBlockUntilTerminator(Start_ea):
     
     return bb_end_ea
 
-def WalkAndBuildFunctionByKnownPrologueAndEpilogue(Prologue, Epilogue):
-    '''
-
-
-    '''
-    pass
-
-
 def GetFunctionEpiloguesOne():
     '''
         @detail Identify function epilogues with two different search pattenrs (below). Once the two byte 
@@ -1421,9 +1413,6 @@ def GetFunctionEpiloguesOne():
         epilogue_data = {}
         saved_immediates = []
 
-        #if epi1_ea != 0x00409299:
-        #    continue
-        #print "Epilogue found: %08x" % 0x00409299
 
         if (addesp_dism.startswith("add")) and  ("esp," in addesp_dism):
             if addesp_insn.ops[1].type == 5:
@@ -1465,6 +1454,7 @@ def GetFunctionEpiloguesOne():
                                 #   break if JMP of any other kind
                                 #
                                 break
+
                         elif next_insn_dism.startswith("retn"):
                             #
                             # straight return instruction, save
@@ -1508,7 +1498,7 @@ def GetFunctionEpiloguesOne():
                         
                         next_insn_ea = next_insn_ea + next_insn.size
                         
-                print "Epilogue end: %08x" % bb_end_ea
+                #print "Epilogue end: %08x" % bb_end_ea
 
         if bb_start_ea > 0:
             basic_block = maze_functions.BasicBlock(bb_start_ea, bb_end_ea)
@@ -1536,8 +1526,8 @@ def GetFunctionEpiloguesOne():
 def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
     '''
         @detail Identify function prologues with one search pattern (below). Once this search pattern
-                 has been identified, the immediate value will be checked agains the immediate value 
-                 that is used by epilogues, then the registers pushed will be compared to those poppped, and then
+                 has been identified, the immediate value will be checked against the immediate values
+                 that are used by Epilogues, then the registers pushed will be compared to those poppped, and then
                  the code walks forward to find the correct basic block.   
 
             6E453F64 81 EC 08 08 00 00                sub     esp, 808h    
@@ -1551,7 +1541,7 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
                  start of the prologue AND if the prologue goes with this epilogue. That is both the registers and the 
                  value for esp should be the same for both epilogue and prologue.
         
-        @return  epilogues_found {start_ea:[bb_start_ea, bb_end_ea, unmatched_stackframe_set, unmatched_return_set, [registers], stackframe_cleanup_immediate]}
+        @return  prologues_found A dictionary of Prologue objects where the keys are the start addresses for the prologue
     '''
 
     stackframe_reserve_opcodes_0 = "81 EC"
@@ -1580,9 +1570,6 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
     
     for prol1_ea in stackframe_reserve_set:
 
-        #if prol1_ea != 0x00409024:
-        #    continue
-        #print "Found: %08x" % prol1_ea
         stackframe_reserve_immediate = 0
         bb_start_ea = 0
         bb_end_ea = 0
@@ -1607,7 +1594,7 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
                     #   Look for start address of the last basic block (epilogue)
                     #
                     
-                    print "Stack immediate found."
+                    #print "Stack immediate found."
 
                     possible_epilogues = stack_immediates_found[stackframe_reserve_immediate]
                     for epilogue_ea in possible_epilogues:
@@ -1615,12 +1602,12 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
                         #   There can be multiple exit points for a function. 
                         #
 
-                        print "possible epilogue ea: %08x" % epilogue_ea
+                        #print "possible epilogue ea: %08x" % epilogue_ea
 
                         if epilogue_ea in Epilogues.keys():
                             epilogue = Epilogues[epilogue_ea]
                             registers = epilogue.registers
-                            print "Prologue %08x, Epilogue %08x" % (subesp_ea, epilogue_ea)
+                            #print "Prologue %08x, Epilogue %08x" % (subesp_ea, epilogue_ea)
                             
                             register_match = False
                             idx = 1
@@ -1661,7 +1648,7 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
 
                                 if bb_end_ea != idc.BADADDR:
 
-                                    print "Subesp ea: %08x, Start ea %08x, End ea %08x" % (subesp_ea, prologue_start_ea, bb_end_ea)
+                                    #print "Subesp ea: %08x, Start ea %08x, End ea %08x" % (subesp_ea, prologue_start_ea, bb_end_ea)
 
                                     idc.create_insn(prologue_start_ea)
 
