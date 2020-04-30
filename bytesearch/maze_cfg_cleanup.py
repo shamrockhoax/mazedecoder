@@ -1810,7 +1810,7 @@ def BuildFunctions2(FunctionPrologues, FunctionEpilogues):
         #
         #print "Check function: %08x" % (prologue_ea)
         rec_descent = maze_function_analysis.RecursiveDescent(prologue_ea, None)
-        curr_function = rec_descent.DoDescentParser3(prologue.connected_epilogues)
+        curr_function = rec_descent.DoDescentParser3()
 
         
         for bblock in curr_function.rogue_basic_blocks:
@@ -1860,20 +1860,57 @@ def CheckAllFunctionsEndAddresses2():
 
         ida_func = ida_funcs.get_func(known_func_ea)
 
-        rec_descent = maze_function_analysis.RecursiveDescent(known_func_ea, None)
-        end_addresses, funcs_to_delete = rec_descent.DoDescentParser()
+        if known_func_ea == 0x004099A0:
+            rec_descent = maze_function_analysis.RecursiveDescent(known_func_ea, None)
+            curr_function = rec_descent.DoDescentParser3()
 
-        if (ida_func.end_ea not in end_addresses) and (len(end_addresses) > 0): 
-            print "Start address: %08x, End address: %08x, Found address: %08x" % (ida_func.start_ea, ida_func.end_ea,end_addresses[0])
-            for ea in funcs_to_delete:
-                print "Deleting: %08x" % ea
-                ida_funcs.del_func(ea)
+            for bblock in curr_function.basic_blocks:
+                if ida_func.end_ea in bblock.instruction_addresses:
+                    print "Mis-match: Start %08x, End: %08x, Fake: %08x" % (curr_function.start_ea, curr_function.end_ea, ida_func.end_ea)
+                    ida_funcs.del_func(curr_function.start_ea)
+                    ida_funcs.add_func(curr_function.start_ea, curr_function.end_ea)
+
+    func_prologue_opcode = "55 89 E5"
+    
+    end_ea = ida_ida.cvar.inf.max_ea
+
+    prologues_found = {}
+  
+    #
+    #   Find stack cleanup instructions
+    #
+    prol1_ea = ida_search.find_binary(0, end_ea, func_prologue_opcode, 0, SEARCH_DOWN | SEARCH_CASE)
+    while prol1_ea != idc.BADADDR:
+        found_func = ida_funcs.get_func(prol1_ea)
+
+        if found_func:
+            prol1_ea = ida_search.find_binary(prol1_ea+5, end_ea, func_prologue_opcode, 0, SEARCH_DOWN | SEARCH_CASE)  
+            continue
+        
+        
+
+        rec_descent = maze_function_analysis.RecursiveDescent(prol1_ea, None)
+        curr_function = rec_descent.DoDescentParser3()
+
+        print "Found function: Start %08x, End %08x" % (curr_function.start_ea, curr_function.end_ea)
+
+        #ida_funcs.add_func(curr_function.start_ea, curr_function.end_ea)
+
+        prol1_ea = ida_search.find_binary(prol1_ea+5, end_ea, func_prologue_opcode, 0, SEARCH_DOWN | SEARCH_CASE)  
+
+        #end_addresses, funcs_to_delete = rec_descent.DoDescentParser()
+
+        #if (ida_func.end_ea not in end_addresses) and (len(end_addresses) > 0): 
+        #    print "Start address: %08x, End address: %08x, Found address: %08x" % (ida_func.start_ea, ida_func.end_ea,end_addresses[0])
+        #    for ea in funcs_to_delete:
+        #        print "Deleting: %08x" % ea
+        #        ida_funcs.del_func(ea)
             
-            ida_funcs.add_func(ida_func.start_ea, end_addresses[0])
+        #    ida_funcs.add_func(ida_func.start_ea, end_addresses[0])
 
-            for ea in funcs_to_delete:
-                print "Adding: %08x" % ea
-                ida_funcs.add_func(ea, idc.BADADDR)
+        #    for ea in funcs_to_delete:
+        #        print "Adding: %08x" % ea
+        #        ida_funcs.add_func(ea, idc.BADADDR)
 
 
         #if (ida_func.end_ea not in end_address) and (len(end_address) > 0):   
@@ -1909,7 +1946,7 @@ def main():
 
 
     find_obfuscations = True
-    do_patches = False
+    do_patches = True
     
     if find_obfuscations: 
         obf_windowsapi_calls = FindObfuscatedWindowsAPICalls()
@@ -1956,28 +1993,28 @@ def main():
     CheckAllFunctionsEndAddresses(typeone_prologues,typeone_epilogues)
     
     #BuildFunctions2(typeone_prologues, typeone_epilogues)
-    #CheckAllFunctionsEndAddresses2()
+    CheckAllFunctionsEndAddresses2()
 
     #
     #   Generate a list of functions after removing deobfuscations
     #
-    post_state_func_list = []
-    for func_ea in idautils.Functions():
-        func = ida_funcs.get_func(func_ea)
-        post_state_func_list.append(func.end_ea)
+    #post_state_func_list = []
+    #for func_ea in idautils.Functions():
+    #    func = ida_funcs.get_func(func_ea)
+    #    post_state_func_list.append(func.end_ea)
     
     
     #
     #   This chunk of code is used to redifine functions that were correctly defined
     #    prior to the IDB
     #
-    missing_funcs = []
-    for func in prev_state_func_list:
-        if func.end_ea not in post_state_func_list:
-            missing_funcs.append(func)
+    #missing_funcs = []
+    #for func in prev_state_func_list:
+    #    if func.end_ea not in post_state_func_list:
+    #        missing_funcs.append(func)
 
-    for func in missing_funcs:
-        print "Addr: %08x" % func.start_ea
+    #for func in missing_funcs:
+    #    print "Addr: %08x" % func.start_ea
     
     #print "Number of Type One epilogues: %d" % len(typeone_epilogues.keys())
     #print "Number of Type One prologues: %d" % len(typeone_prologues.keys())

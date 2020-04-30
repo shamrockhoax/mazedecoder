@@ -10,10 +10,11 @@ This is the source code related to my blogpost published over at [Crowdstrike's 
 Currently, only the Byte-search Method discussed in the blog post is covered. Eventually, I'd like to add a few different methods. 
 
 ### Bytesearch Method
-Relies upon searching for specific bytes to identify the obfuscations
+Relies upon searching for specific bytes to identify the obfuscations. 
 
 * Takes a bit to run, to many "plan_and_wait()" functions, and I print logs to the output window
 * Functions that don't get auto-defined after patching should now be definable in IDA via pressing 'p' 
+* The main-brain works, but I am working on some improvements
 * bytesearch/maze_cfg_cleanup.py
     * Execute this script to decode the IDB
 
