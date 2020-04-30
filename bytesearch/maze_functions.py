@@ -131,7 +131,7 @@ class RecursiveDescent(object):
 
 
 
-    def DoDescentParser(self,EndAddresses):
+    def DoDescentParser(self,Prologue):
         '''
             @brief Walk the function leveraging a recursive descent parser. 
 
@@ -174,7 +174,7 @@ class RecursiveDescent(object):
             #    print "deferred target: %08x" % target
             
 
-            while curr_insn_ea not in EndAddresses:
+            while curr_insn_ea not in Prologue.possible_epilogues:
                 #
                 # walk only to a known epilogue
                 #
@@ -209,8 +209,6 @@ class RecursiveDescent(object):
                     #idc.plan_and_wait(curr_insn_ea, curr_insn_ea+curr_insn.size)
                 
                 curr_func_name = idc.get_func_name(curr_insn_ea)
-                if curr_insn_ea == 0x6E44184C:
-                    print "Current function name: ", curr_func_name
                 if curr_func_name:
                     #
                     #   check if in function, undefine function, add to list to redefine later
@@ -251,6 +249,10 @@ class RecursiveDescent(object):
                 
                 else:
                     curr_insn_ea = curr_insn_ea + curr_insn.size
+
+            if curr_insn_ea in Prologue.possible_epilogues:
+                Prologue.connected_epilogues.append(curr_insn_ea)
+                continue     
 
     
     def GetInstuctionTargetAddress(self,Target_insn):
@@ -460,3 +462,4 @@ class FunctionPrologue(object):
         self.registers = Registers
 
         self.connected_epilogues = []
+        self.possible_epilogues = []
