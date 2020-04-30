@@ -368,7 +368,7 @@ class RecursiveDescent(object):
                 
         return [func_end_ea, ea_part_of_another_func]
 
-    def DoDescentParser3(self, EndAddresses):
+    def DoDescentParser3(self):
         '''
             @brief Walk the function leveraging a recursive descent parser
 

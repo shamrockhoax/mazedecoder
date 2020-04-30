@@ -1421,6 +1421,10 @@ def GetFunctionEpiloguesOne():
         epilogue_data = {}
         saved_immediates = []
 
+        #if epi1_ea != 0x00409299:
+        #    continue
+        #print "Epilogue found: %08x" % 0x00409299
+
         if (addesp_dism.startswith("add")) and  ("esp," in addesp_dism):
             if addesp_insn.ops[1].type == 5:
                 #
@@ -1504,6 +1508,7 @@ def GetFunctionEpiloguesOne():
                         
                         next_insn_ea = next_insn_ea + next_insn.size
                         
+                print "Epilogue end: %08x" % bb_end_ea
 
         if bb_start_ea > 0:
             basic_block = maze_functions.BasicBlock(bb_start_ea, bb_end_ea)
@@ -1515,7 +1520,8 @@ def GetFunctionEpiloguesOne():
             #   stack immediates
             #
             if stackframe_cleanup_immediate in stack_immediates_found.keys():
-                stack_immediates_found[stackframe_cleanup_immediate].append(stackframe_cleanup_immediate)
+                #stack_immediates_found[stackframe_cleanup_immediate].append(stackframe_cleanup_immediate)
+                stack_immediates_found[stackframe_cleanup_immediate].append(bb_start_ea)
             else:
                 saved_immediates.append(bb_start_ea)
                 stack_immediates_found[stackframe_cleanup_immediate] = saved_immediates
@@ -1548,7 +1554,8 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
         @return  epilogues_found {start_ea:[bb_start_ea, bb_end_ea, unmatched_stackframe_set, unmatched_return_set, [registers], stackframe_cleanup_immediate]}
     '''
 
-    stackframe_cleanup_opcode = "81 EC"
+    stackframe_reserve_opcodes_0 = "81 EC"
+    stackframe_reserve_opcodes_1 = "83 EC"
     
     end_ea = ida_ida.cvar.inf.max_ea
     stackframe_reserve_set = set()
@@ -1561,13 +1568,21 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
     #
     #   Find stack cleanup instructions
     #
-    prol1_ea = ida_search.find_binary(0, end_ea, stackframe_cleanup_opcode, 0, SEARCH_DOWN | SEARCH_CASE)
+    prol1_ea = ida_search.find_binary(0, end_ea, stackframe_reserve_opcodes_0, 0, SEARCH_DOWN | SEARCH_CASE)
     while prol1_ea != idc.BADADDR:
         stackframe_reserve_set.add(prol1_ea)
-        prol1_ea = ida_search.find_binary(prol1_ea+5, end_ea, stackframe_cleanup_opcode, 0, SEARCH_DOWN | SEARCH_CASE)
+        prol1_ea = ida_search.find_binary(prol1_ea+5, end_ea, stackframe_reserve_opcodes_0, 0, SEARCH_DOWN | SEARCH_CASE)
+    
+    prol1_ea = ida_search.find_binary(0, end_ea, stackframe_reserve_opcodes_1, 0, SEARCH_DOWN | SEARCH_CASE)
+    while prol1_ea != idc.BADADDR:
+        stackframe_reserve_set.add(prol1_ea)
+        prol1_ea = ida_search.find_binary(prol1_ea+5, end_ea, stackframe_reserve_opcodes_1, 0, SEARCH_DOWN | SEARCH_CASE)
     
     for prol1_ea in stackframe_reserve_set:
 
+        #if prol1_ea != 0x00409024:
+        #    continue
+        #print "Found: %08x" % prol1_ea
         stackframe_reserve_immediate = 0
         bb_start_ea = 0
         bb_end_ea = 0
@@ -1592,16 +1607,20 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
                     #   Look for start address of the last basic block (epilogue)
                     #
                     
+                    print "Stack immediate found."
+
                     possible_epilogues = stack_immediates_found[stackframe_reserve_immediate]
                     for epilogue_ea in possible_epilogues:
                         #
                         #   There can be multiple exit points for a function. 
                         #
 
+                        print "possible epilogue ea: %08x" % epilogue_ea
+
                         if epilogue_ea in Epilogues.keys():
                             epilogue = Epilogues[epilogue_ea]
                             registers = epilogue.registers
-                            #print "Prologue %08x, Epilogue %08x" % (subesp_ea, epilogue_ea)
+                            print "Prologue %08x, Epilogue %08x" % (subesp_ea, epilogue_ea)
                             
                             register_match = False
                             idx = 1
@@ -1621,7 +1640,7 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
                                             #
                                             # mnemonic, operand type, and reg value verified
                                             #
-
+                                            
                                             register_match = True
                                             idx += 1
                                         
@@ -1636,11 +1655,15 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
                                     break
                             
                             if register_match:
-                                bb_end_ea = WalkBasicBlockUntilTerminator(subesp_ea)
+                                prologue_start_ea = subesp_ea - idx + 1
+                                bb_end_ea = WalkBasicBlockUntilTerminator(prologue_start_ea)
+                                
 
                                 if bb_end_ea != idc.BADADDR:
-                                    prologue_start_ea = subesp_ea - idx + 1
-                                    #print "Subesp ea: %08x, Start ea %08x, End ea %08x" % (subesp_ea, prologue_start_ea, bb_end_ea)
+
+                                    print "Subesp ea: %08x, Start ea %08x, End ea %08x" % (subesp_ea, prologue_start_ea, bb_end_ea)
+
+                                    idc.create_insn(prologue_start_ea)
 
                                     if prologue_start_ea in prologues_found.keys():
                                         #
@@ -1648,7 +1671,7 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
                                         #
 
                                         prologue = prologues_found[prologue_start_ea]
-                                        prologue.connected_epilogues.append(epilogue_ea)
+                                        prologue.possible_epilogues.append(epilogue_ea)
                                         prologues_found[prologue_start_ea] = prologue
 
                                     else:
@@ -1659,7 +1682,7 @@ def GetFunctionProloguesOne(StackImmeiatesFound, Epilogues):
                                         basic_block = maze_functions.BasicBlock(prologue_start_ea, bb_end_ea)
                                         basic_block.FillOutBlock()
                                         prologue = maze_functions.FunctionPrologue(basic_block, stackframe_reserve_immediate, registers)
-                                        prologue.connected_epilogues.append(epilogue_ea)
+                                        prologue.possible_epilogues.append(epilogue_ea)
                                         prologues_found[prologue_start_ea] = prologue
     
     return prologues_found
@@ -1673,8 +1696,18 @@ def BuildFunctions(FunctionPrologues, FunctionEpilogues):
 
     idx = 0
     
+    ea = FunctionPrologues.keys()[0]
+    curr_segm_start_ea = idc.get_segm_start(ea) 
+    curr_segm_end_ea = idc.get_segm_end(ea)
+
+    func_creation_errors = []
+
     for prologue_ea in FunctionPrologues.keys():
         
+        #if prologue_ea != 0x00409020:
+        #    continue
+        #print "Function: %08x" % prologue_ea
+
         wrong_functions = set()
          
         prologue =  FunctionPrologues[prologue_ea]
@@ -1685,28 +1718,37 @@ def BuildFunctions(FunctionPrologues, FunctionEpilogues):
         undefined_function_queue = []
 
         #
+        #   Walk from Prologue to Epilogue
+        #
+        print "Check function: %08x" % (prologue_ea)
+        rec_descent = maze_functions.RecursiveDescent(prologue_ea)
+        rec_descent.DoDescentParser(prologue)
+
+        #
         #   Get epilogue
         #
+        if len(prologue.connected_epilogues) < 1:
+            print "[FUNCTION Build Error] No Epilogue Found %08x, having IDA determine end of function" % prologue_ea
+            func_creation_errors.append(prologue_ea)
+            continue
+        
+        if prologue.connected_epilogues[0] not in FunctionEpilogues.keys():
+            print "[FUNCTION Build Error] Matching Epilogue Not Found %08x, End %08x" % (prologue_ea, prologue.connected_epilogues[0])
+            func_creation_errors.append(prologue_ea)
+            continue
+
         epilogue = FunctionEpilogues[prologue.connected_epilogues[0]]
         epilogue_end_ea = epilogue.basic_block.end_ea
         epilogue_end_insn = ida_ua.insn_t()
         ida_ua.decode_insn(epilogue_end_insn, epilogue_end_ea)
         function_end_ea = epilogue_end_ea + epilogue_end_insn.size
-  
-        
-        #
-        #   Call recursion function
-        #
-        print "Check function: %08x" % (prologue_ea)
-        rec_descent = maze_functions.RecursiveDescent(prologue_ea)
-        rec_descent.DoDescentParser(prologue.connected_epilogues)
 
         plan_and_wait(prologue_ea,function_end_ea,0) 
 
         #
         #   Create function
         #
-        add_func_result = add_func(prologue_ea,function_end_ea)
+        add_func_result = ida_funcs.add_func(prologue_ea,function_end_ea)
         
         print "Function Created: %s %08x, end ea: %08x" % (add_func_result, prologue_ea, function_end_ea)
  
@@ -1715,14 +1757,20 @@ def BuildFunctions(FunctionPrologues, FunctionEpilogues):
             #   redefined functions that were undefined in the DoDescentParser method.
             #
             #print "wrong func, start %08x, end %08x" % (wrong_func_ea[0],wrong_func_ea[1])
-            add_func(wrong_func_ea,idc.BADADDR)
+            ida_funcs.add_func(wrong_func_ea,idc.BADADDR)
+        
+        for err_func_ea in func_creation_errors:
+            ida_funcs.add_func(err_func_ea,idc.BADADDR)
         
         idx +=1
     
+    
+    idc.plan_and_wait(curr_segm_start_ea,curr_segm_end_ea,0)
+
     print "Number of functions created: %d" % (idx)
          
 
-def CheckAllFunctionsEndAddresses(FunctionPrologues, FunctionEpilogues):
+def DeprecateCheckAllFunctionsEndAddresses(FunctionPrologues, FunctionEpilogues):
     '''
         @brief Check all known functions to ensure function start and end_ea are correct
     '''
@@ -1767,11 +1815,14 @@ def CheckAllFunctionsEndAddresses(FunctionPrologues, FunctionEpilogues):
                     #
                     break
                 
-                idc.del_func(known_func_ea)
-                plan_and_wait(known_func_ea,function_end_addresses[0])
+                if len(function_end_addresses) < 1:
+                    continue
+
+                ida_funcs.del_func(known_func_ea)
+                idc.plan_and_wait(known_func_ea,function_end_addresses[0])
                 idc.del_items(known_func_ea,1)
-                add_func(known_func_ea,function_end_addresses[0])
-                plan_and_wait(known_func_ea,function_end_addresses[0])
+                ida_funcs.add_func(known_func_ea,function_end_addresses[0])
+                idc.plan_and_wait(known_func_ea,function_end_addresses[0])
 
                 print "Incorrect function ends: %08x, %08x" % (known_func_ea, ida_specified_func_end_ea)
 
@@ -1810,7 +1861,7 @@ def BuildFunctions2(FunctionPrologues, FunctionEpilogues):
         #
         #print "Check function: %08x" % (prologue_ea)
         rec_descent = maze_function_analysis.RecursiveDescent(prologue_ea, None)
-        curr_function = rec_descent.DoDescentParser3(prologue.connected_epilogues)
+        curr_function = rec_descent.DoDescentParser3()
 
         
         for bblock in curr_function.rogue_basic_blocks:
@@ -1848,9 +1899,12 @@ def BuildFunctions2(FunctionPrologues, FunctionEpilogues):
                     ida_funcs.add_func(incorrect_ida_func.start_ea, incorrect_ida_func.end_ea)
     
 
-def CheckAllFunctionsEndAddresses2():    
+def CheckAllFunctionsEndAddresses():    
     '''
-        @brief Check all known functions to ensure function start and end_ea are correct
+        @brief Identify and correct functions that either have not been defined or have incorrect start/end addresses
+
+        @detail  Multiple steps are involved for created/recreating functions. The first method walks each Function that 
+                  IDA is aware of and verifies the start and end points are correct. 
     '''
 
     for known_func_ea in Functions():
@@ -1858,22 +1912,65 @@ def CheckAllFunctionsEndAddresses2():
         #   Iterate over each defined function in IDA
         #
 
-        ida_func = ida_funcs.get_func(known_func_ea)
+        curr_ida_func = ida_funcs.get_func(known_func_ea)
 
+        
         rec_descent = maze_function_analysis.RecursiveDescent(known_func_ea, None)
-        end_addresses, funcs_to_delete = rec_descent.DoDescentParser()
+        curr_function = rec_descent.DoDescentParser3()
 
-        if (ida_func.end_ea not in end_addresses) and (len(end_addresses) > 0): 
-            print "Start address: %08x, End address: %08x, Found address: %08x" % (ida_func.start_ea, ida_func.end_ea,end_addresses[0])
-            for ea in funcs_to_delete:
-                print "Deleting: %08x" % ea
-                ida_funcs.del_func(ea)
+        for bblock in curr_function.basic_blocks:
+            if curr_ida_func.end_ea in bblock.instruction_addresses:
+                #
+                # if the end_ea as currently defined by IDA exists within the body of a basic block, then the function 
+                #  is incorrectly defined, this will correct that problem.
+                #
+
+                print "Mis-match: Start %08x, End: %08x, Fake: %08x" % (curr_function.start_ea, curr_function.end_ea, curr_ida_func.end_ea)
+
+                ida_funcs.del_func(curr_function.start_ea)
+                ida_funcs.add_func(curr_function.start_ea, curr_function.end_ea)
+
+    func_prologue_opcode = "55 89 E5"
+    
+    end_ea = ida_ida.cvar.inf.max_ea
+
+    prologues_found = {}
+  
+    #
+    #   Find stack cleanup instructions
+    #
+    prol1_ea = ida_search.find_binary(0, end_ea, func_prologue_opcode, 0, SEARCH_DOWN | SEARCH_CASE)
+    while prol1_ea != idc.BADADDR:
+        found_func = ida_funcs.get_func(prol1_ea)
+
+        if found_func:
+            prol1_ea = ida_search.find_binary(prol1_ea+5, end_ea, func_prologue_opcode, 0, SEARCH_DOWN | SEARCH_CASE)  
+            continue
+        
+        
+
+        rec_descent = maze_function_analysis.RecursiveDescent(prol1_ea, None)
+        curr_function = rec_descent.DoDescentParser3()
+
+        print "Found function: Start %08x, End %08x" % (curr_function.start_ea, curr_function.end_ea)
+
+        ida_funcs.add_func(curr_function.start_ea, curr_function.end_ea)
+
+        prol1_ea = ida_search.find_binary(prol1_ea+5, end_ea, func_prologue_opcode, 0, SEARCH_DOWN | SEARCH_CASE)  
+
+        #end_addresses, funcs_to_delete = rec_descent.DoDescentParser()
+
+        #if (ida_func.end_ea not in end_addresses) and (len(end_addresses) > 0): 
+        #    print "Start address: %08x, End address: %08x, Found address: %08x" % (ida_func.start_ea, ida_func.end_ea,end_addresses[0])
+        #    for ea in funcs_to_delete:
+        #        print "Deleting: %08x" % ea
+        #        ida_funcs.del_func(ea)
             
-            ida_funcs.add_func(ida_func.start_ea, end_addresses[0])
+        #    ida_funcs.add_func(ida_func.start_ea, end_addresses[0])
 
-            for ea in funcs_to_delete:
-                print "Adding: %08x" % ea
-                ida_funcs.add_func(ea, idc.BADADDR)
+        #    for ea in funcs_to_delete:
+        #        print "Adding: %08x" % ea
+        #        ida_funcs.add_func(ea, idc.BADADDR)
 
 
         #if (ida_func.end_ea not in end_address) and (len(end_address) > 0):   
@@ -1897,16 +1994,6 @@ def main():
     obf_windowsapi_calls = set()
     calltypethree_addresses = set()
     absolute_jumps = set()
-
-    #
-    #   Generate a list of functions prior to removing deobfuscations
-    #
-    prev_state_func_list = []
-    for func_ea in idautils.Functions():
-        func = ida_funcs.get_func(func_ea)
-        prev_state_func_list.append( func )
-
-
 
     find_obfuscations = True
     do_patches = True
@@ -1953,34 +2040,16 @@ def main():
     typeone_prologues = GetFunctionProloguesOne(epilogue_immediates,typeone_epilogues)
     BuildFunctions(typeone_prologues,typeone_epilogues)
 
-    CheckAllFunctionsEndAddresses(typeone_prologues,typeone_epilogues)
+    CheckAllFunctionsEndAddresses()
     
+    #
+    #   Updated version of BuildFunctions (in progress)
+    #
     #BuildFunctions2(typeone_prologues, typeone_epilogues)
-    #CheckAllFunctionsEndAddresses2()
-
-    #
-    #   Generate a list of functions after removing deobfuscations
-    #
-    post_state_func_list = []
-    for func_ea in idautils.Functions():
-        func = ida_funcs.get_func(func_ea)
-        post_state_func_list.append(func.end_ea)
     
-    
-    #
-    #   This chunk of code is used to redifine functions that were correctly defined
-    #    prior to the IDB
-    #
-    missing_funcs = []
-    for func in prev_state_func_list:
-        if func.end_ea not in post_state_func_list:
-            missing_funcs.append(func)
-
-    for func in missing_funcs:
-        print "Addr: %08x" % func.start_ea
     
     #print "Number of Type One epilogues: %d" % len(typeone_epilogues.keys())
     #print "Number of Type One prologues: %d" % len(typeone_prologues.keys())
-    print "Aboslute Jump count: ", len(absolute_jumps)
+    #print "Aboslute Jump count: ", len(absolute_jumps)
 
 main()
