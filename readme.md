@@ -14,7 +14,12 @@ Relies upon searching for specific bytes to identify the obfuscations.
 
 * Takes a bit to run, to many "plan_and_wait()" functions, and I print logs to the output window
 * Functions that don't get auto-defined after patching should now be definable in IDA via pressing 'p' 
-* The main-brain works, but I am working on some improvements
+<<<<<<< HEAD
+=======
+* The main-branch works, but I am working on some improvements
+* Some functions have orphaned basic blocks, it's annoying and I'm working on a solution
+* Comments are being updated
+>>>>>>> byte_search_cfg_walker
 * bytesearch/maze_cfg_cleanup.py
     * Execute this script to decode the IDB
 
