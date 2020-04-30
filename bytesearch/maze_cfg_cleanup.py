@@ -1695,6 +1695,12 @@ def BuildFunctions(FunctionPrologues, FunctionEpilogues):
     '''
 
     idx = 0
+    
+    ea = FunctionPrologues.keys()[0]
+    curr_segm_start_ea = idc.get_segm_start(ea) 
+    curr_segm_end_ea = idc.get_segm_end(ea)
+
+    func_creation_errors = []
 
     for prologue_ea in FunctionPrologues.keys():
         
@@ -1722,11 +1728,13 @@ def BuildFunctions(FunctionPrologues, FunctionEpilogues):
         #   Get epilogue
         #
         if len(prologue.connected_epilogues) < 1:
-            print "[FUNCTION Build Error] No Epilogue Found %08x" % prologue_ea
+            print "[FUNCTION Build Error] No Epilogue Found %08x, having IDA determine end of function" % prologue_ea
+            func_creation_errors.append(prologue_ea)
             continue
         
         if prologue.connected_epilogues[0] not in FunctionEpilogues.keys():
             print "[FUNCTION Build Error] Matching Epilogue Not Found %08x, End %08x" % (prologue_ea, prologue.connected_epilogues[0])
+            func_creation_errors.append(prologue_ea)
             continue
 
         epilogue = FunctionEpilogues[prologue.connected_epilogues[0]]
@@ -1740,7 +1748,7 @@ def BuildFunctions(FunctionPrologues, FunctionEpilogues):
         #
         #   Create function
         #
-        add_func_result = add_func(prologue_ea,function_end_ea)
+        add_func_result = ida_funcs.add_func(prologue_ea,function_end_ea)
         
         print "Function Created: %s %08x, end ea: %08x" % (add_func_result, prologue_ea, function_end_ea)
  
@@ -1749,14 +1757,20 @@ def BuildFunctions(FunctionPrologues, FunctionEpilogues):
             #   redefined functions that were undefined in the DoDescentParser method.
             #
             #print "wrong func, start %08x, end %08x" % (wrong_func_ea[0],wrong_func_ea[1])
-            add_func(wrong_func_ea,idc.BADADDR)
+            ida_funcs.add_func(wrong_func_ea,idc.BADADDR)
+        
+        for err_func_ea in func_creation_errors:
+            ida_funcs.add_func(err_func_ea,idc.BADADDR)
         
         idx +=1
     
+    
+    idc.plan_and_wait(curr_segm_start_ea,curr_segm_end_ea,0)
+
     print "Number of functions created: %d" % (idx)
          
 
-def CheckAllFunctionsEndAddresses(FunctionPrologues, FunctionEpilogues):
+def DeprecateCheckAllFunctionsEndAddresses(FunctionPrologues, FunctionEpilogues):
     '''
         @brief Check all known functions to ensure function start and end_ea are correct
     '''
@@ -1804,11 +1818,11 @@ def CheckAllFunctionsEndAddresses(FunctionPrologues, FunctionEpilogues):
                 if len(function_end_addresses) < 1:
                     continue
 
-                idc.del_func(known_func_ea)
-                plan_and_wait(known_func_ea,function_end_addresses[0])
+                ida_funcs.del_func(known_func_ea)
+                idc.plan_and_wait(known_func_ea,function_end_addresses[0])
                 idc.del_items(known_func_ea,1)
-                add_func(known_func_ea,function_end_addresses[0])
-                plan_and_wait(known_func_ea,function_end_addresses[0])
+                ida_funcs.add_func(known_func_ea,function_end_addresses[0])
+                idc.plan_and_wait(known_func_ea,function_end_addresses[0])
 
                 print "Incorrect function ends: %08x, %08x" % (known_func_ea, ida_specified_func_end_ea)
 
@@ -1885,9 +1899,12 @@ def BuildFunctions2(FunctionPrologues, FunctionEpilogues):
                     ida_funcs.add_func(incorrect_ida_func.start_ea, incorrect_ida_func.end_ea)
     
 
-def CheckAllFunctionsEndAddresses2():    
+def CheckAllFunctionsEndAddresses():    
     '''
-        @brief Check all known functions to ensure function start and end_ea are correct
+        @brief Identify and correct functions that either have not been defined or have incorrect start/end addresses
+
+        @detail  Multiple steps are involved for created/recreating functions. The first method walks each Function that 
+                  IDA is aware of and verifies the start and end points are correct. 
     '''
 
     for known_func_ea in Functions():
@@ -1895,15 +1912,21 @@ def CheckAllFunctionsEndAddresses2():
         #   Iterate over each defined function in IDA
         #
 
-        ida_func = ida_funcs.get_func(known_func_ea)
+        curr_ida_func = ida_funcs.get_func(known_func_ea)
 
         
         rec_descent = maze_function_analysis.RecursiveDescent(known_func_ea, None)
         curr_function = rec_descent.DoDescentParser3()
 
         for bblock in curr_function.basic_blocks:
-            if ida_func.end_ea in bblock.instruction_addresses:
-                print "Mis-match: Start %08x, End: %08x, Fake: %08x" % (curr_function.start_ea, curr_function.end_ea, ida_func.end_ea)
+            if curr_ida_func.end_ea in bblock.instruction_addresses:
+                #
+                # if the end_ea as currently defined by IDA exists within the body of a basic block, then the function 
+                #  is incorrectly defined, this will correct that problem.
+                #
+
+                print "Mis-match: Start %08x, End: %08x, Fake: %08x" % (curr_function.start_ea, curr_function.end_ea, curr_ida_func.end_ea)
+
                 ida_funcs.del_func(curr_function.start_ea)
                 ida_funcs.add_func(curr_function.start_ea, curr_function.end_ea)
 
@@ -1972,16 +1995,6 @@ def main():
     calltypethree_addresses = set()
     absolute_jumps = set()
 
-    #
-    #   Generate a list of functions prior to removing deobfuscations
-    #
-    prev_state_func_list = []
-    for func_ea in idautils.Functions():
-        func = ida_funcs.get_func(func_ea)
-        prev_state_func_list.append( func )
-
-
-
     find_obfuscations = True
     do_patches = True
     
@@ -2026,36 +2039,17 @@ def main():
     typeone_epilogues, epilogue_immediates = GetFunctionEpiloguesOne()
     typeone_prologues = GetFunctionProloguesOne(epilogue_immediates,typeone_epilogues)
     BuildFunctions(typeone_prologues,typeone_epilogues)
-    idc.plan_and_wait(0x401000,0x43C000,0)
 
-    #CheckAllFunctionsEndAddresses(typeone_prologues,typeone_epilogues)
+    CheckAllFunctionsEndAddresses()
     
+    #
+    #   Updated version of BuildFunctions (in progress)
+    #
     #BuildFunctions2(typeone_prologues, typeone_epilogues)
-    CheckAllFunctionsEndAddresses2()
-
-    #
-    #   Generate a list of functions after removing deobfuscations
-    #
-    #post_state_func_list = []
-    #for func_ea in idautils.Functions():
-    #    func = ida_funcs.get_func(func_ea)
-    #    post_state_func_list.append(func.end_ea)
     
-    
-    #
-    #   This chunk of code is used to redifine functions that were correctly defined
-    #    prior to the IDB
-    #
-    #missing_funcs = []
-    #for func in prev_state_func_list:
-    #    if func.end_ea not in post_state_func_list:
-    #        missing_funcs.append(func)
-
-    #for func in missing_funcs:
-    #    print "Addr: %08x" % func.start_ea
     
     #print "Number of Type One epilogues: %d" % len(typeone_epilogues.keys())
     #print "Number of Type One prologues: %d" % len(typeone_prologues.keys())
-    print "Aboslute Jump count: ", len(absolute_jumps)
+    #print "Aboslute Jump count: ", len(absolute_jumps)
 
 main()

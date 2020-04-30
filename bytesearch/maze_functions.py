@@ -1,117 +1,12 @@
-import ida_ua, idc
+import ida_ua, idc, idaapi
 
-def CheckInSegment(Curr_ea, Target_ea):
-    '''
-        @brief Check if the Target_ea is in the same segment as the Curr_ea. 
-    '''
+idaapi.require("maze_deobf_utils")
 
-    #print "segcheck", Target_ea >= get_segm_start(Curr_ea), Target_ea <= get_segm_end(Curr_ea)
+"""
+    This file and the "maze_funtion_analysis.py" containd uplicate method and class names. 
+     The "maze_funtion_analysis.py" is going to be the updated version of this file. 
 
-    return Target_ea >= get_segm_start(Curr_ea) and Target_ea <= get_segm_end(Curr_ea)
-
-def CheckValidInstrImmediate(Curr_insn_t, Expected_mnem):
-    '''
-        @detail Takes single operand instruction and validates the instruction matches Expected_mnem and
-                   that the operand is an immediate (type 5).
-
-    '''
-    isValid = False
-
-    mnem = Expected_mnem.lower()
-
-    if type(Curr_insn_t) == ida_ua.insn_t :
-        #
-        #  Correct type
-        #
-
-        insn = Curr_insn_t
-        insn_ea = insn.ea
-        insn_dism = generate_disasm_line(insn_ea,1)
-
-        if insn_dism[:5].startswith(mnem):
-            operands = insn.ops
-            if len(operands) > 0:
-                idx = 0
-                for op in operands:
-                    if op.type != 0:
-                        if op.type == 5:
-                            isValid = True
-                        
-                        if idx > 0:
-                            #
-                            #   More than one operand
-                            #
-                            isVAlid = False
-                    idx += 1
-    
-    return isValid
-
-def CheckValidTargettingInstr(Curr_insn_t, Expected_mnem):
-    '''
-        @detail Takes a push, jz, jnz, instruction and verifies that the operand
-                 and the target of the address is valid.
-           
-        @returns BOOL           
-    '''
-
-    isValid = False
-
-    mnem = Expected_mnem.lower()
-
-    #print type(Curr_insn_t), Expected_mnem
-
-    if (type(Curr_insn_t) == ida_ua.insn_t) and (mnem in ['push', 'jz', 'jnz']) :
-        #
-        #   Typecheck for Curr_insn_t
-        #
-    #print "valid check 0"
-    
-        insn_ea = Curr_insn_t.ea
-        insn_dism = generate_disasm_line(insn_ea,1)
-
-        if mnem in insn_dism[:5]:
-            #
-            #   Ensure expected mnemonic in disassembly
-            #
-            
-            #print "valid check 1"
-            #
-            #   There shoud be a single populated operand in the ops array
-            #    I believe I read that the array always contains 8 op_t objects ( could be x86 only )
-            #    Only the one at idx 0 should have a type other than 0.
-            #
-            operands = Curr_insn_t.ops
-            if len(operands) > 0:
-                #print "valid check 2"
-                for op in operands:
-                    if op.type != 0:
-                        if (op.type in [5, 6, 7]) and (not isValid):
-                            #
-                            #  Type is an immediate, immediate far address, immediate near address
-                            #
-
-                            if op.type == 5:
-                                target_ea = op.value
-                            elif op.type == 6 or op.type == 7:
-                                target_ea = op.addr
-                            #print "valid check 3", hex(insn_ea), hex(target_ea) 
-                            if CheckInSegment(insn_ea, target_ea):
-                                #
-                                #   Located in the correct segment
-                                #
-
-                                #print "valid check 4"
-                                isValid = True
-                        elif isValid:
-                            #
-                            #   If other operand type
-                            #
-                            #print "valid check 5"
-                            isValid = False
-                            break
-
-
-    return isValid
+"""
 
 class RecursiveDescent(object):
     '''
@@ -126,9 +21,6 @@ class RecursiveDescent(object):
 
         self.entry_point = Start_ea
         self.deferred_targets.append(Start_ea)
-
-        self.emulators = Eumulators()
-
 
 
     def DoDescentParser(self,Prologue):
@@ -179,7 +71,7 @@ class RecursiveDescent(object):
                 # walk only to a known epilogue
                 #
                 
-                print "Current EA: %08x" % (curr_insn_ea)
+                #print "Current EA: %08x" % (curr_insn_ea)
                 
                 self.instructions_walked.append(curr_insn_ea)
 
@@ -273,132 +165,6 @@ class RecursiveDescent(object):
                 target_ea = target_op.addr
     
         return target_ea
-
-    def DoDescentParser2(self, Targ_Funct):
-        '''
-            @brief Walk the function leveraging a recursive descent parser
-
-            @detail Starting with a prologue walk each instruction until the associated epilogue is reached. For functions 
-                    with multiple epilogues, iterate over each one. 
-
-                    As each instruction is traversed, do the following three
-                    things:
-
-                        - Undefine the instruction
-                        - Mark the instruction as code
-                        - Check to see if the instruction is already a member of another function
-                    
-                    If an instruction is a member of another function, undefine that function and place it in a queue. At the end
-                     of traversing each function, a new function is going to be created with the new prologue and the new epilogue.
-                     In addition, the undefined function queue is going to be iterated over and each function will be redefined. This
-                     should clean up messy function
-                    
-                    much thanks to the author of "Practical Binary Analysis" for the break down of the algorithm in Chapter 8.
-        
-                @return function object
-        '''
-
-        #
-        #   jmps = [eval("idaapi."+name) for name in dir(idaapi) if "NN_j" in name]
-        #
-        jcc_terminators = ['jnz','jz','jo','jno', 'js','jns', 'je','jne', 'jb', 'jnae', 'jc', 'jnb', 'jae', 'jnc', 'jbe','jna', 'ja','jnbe', 'jl','jnge','jge','jnl','jle','jng','jg','jnle','jp','jpe','jnp','jpo','jcxz','jecxz']
-
-        function = Function()
-
-        while len(self.deferred_targets) > 0:
-
-            curr_insn_ea = self.deferred_targets.pop()
-
-            bblock = BasicBlock(curr_insn_ea)
-
-            if curr_insn_ea in self.instructions_walked:
-                #
-                #   skip instructions that were already walked
-                #
-                
-                continue
-            
-            self.instructions_walked.append(curr_insn_ea)
-
-            while curr_insn_ea != idc.BADADDR:
-
-                #
-                #   Verify current instruction information
-                #
-                curr_insn = ida_ua.insn_t()
-                decode_result = ida_ua.decode_insn(curr_insn, curr_insn_ea)
-                if decode_result < 1:
-                    # 
-                    #   break if instruction invalid
-                    #
-                    bblock.end_ea = curr_insn_ea
-                    break
-            
-                #
-                #   Call Emulation Code Sequence
-                #
-                
-
-
-
-
-class Function(object):
-    '''
-        @brief Representation of a function.
-    '''
-    def __init__():
-        basic_blocks = []
-
-class Eumulators(object):
-    '''
-        @brief Identify and Deobfuscate the various obfuscations
-    '''
-
-    def __init(self):
-        pass
-
-    def CheckZeroFlagAbsoluteJMP(self, EffectiveAddress):
-        '''
-        '''
-        pass
-    
-    def CheckZFEmulatedCall(self, EffectiveAddress):
-        '''
-            @brief  Identify emulated function calls.
-
-            @detail 
-
-            push    <return address>
-	        0000    JZ      xxxxxxxx
-	        0001    JNZ     0010
-
-
-            @returns The return address that is pushed to the stack for the CALL instruction
-        '''
-
-        rtrn_addr = idc.BADADDR
-
-        push_instr_ea = EffectiveAddress
-       
-        push_insn = ida_ua.insn_t()
-        ida_ua.decode_insn(push_insn, push_instr_ea)
-
-        if CheckValidTargettingInstr(push_insn, "push"):
-            """
-                Valid PUSH instruction.
-            """
-
-            jz_insn_ea = push_instr_ea + push_insn.size()
-            jz_insn = ida_ua.insn_t()
-            ida_ua.decode_insn(jz_insn, jz_insn_ea)
-
-            if CheckValidTargettingInstr(push_insn, "push"):
-                """
-                    Valid PUSH instruction.
-                """
-
-        return rtrn_addr
-
 
 
 class BasicBlock(object):
