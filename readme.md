@@ -3,7 +3,7 @@
 </p>
 
 # Deobfuscating Maze's Control Flow Obfuscations
-This is the source code related to my blogpost published over at [Crowdstrike's blog](). Forgive me, but currently the source code is written using Python 2.7.
+This is the source code related to my blogpost [The Many Paths Through Maze](https://www.crowdstrike.com/blog/maze-ransomware-deobfuscation/). Forgive me, but currently the source code is written using Python 2.7.
 
 ## Deobfuscation Methods
 
